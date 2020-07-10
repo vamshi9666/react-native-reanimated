@@ -23,19 +23,8 @@
 #import "Nodes/REAFunctionNode.h"
 #import "Nodes/REACallFuncNode.h"
 
-@interface RCTUIManager ()
-
-- (void)updateView:(nonnull NSNumber *)reactTag
-          viewName:(NSString *)viewName
-             props:(NSDictionary *)props;
-
-- (void)setNeedsLayout;
-
-@end
-
-
 // Interface below has been added in order to use private methods of RCTUIManager,
-// RCTUIManager#UpdateView is a React Method which is exported to JS but in 
+// RCTUIManager#UpdateView is a React Method which is exported to JS but in
 // Objective-C it stays private
 // RCTUIManager#setNeedsLayout is a method which updated layout only which
 // in its turn will trigger relayout if no batch has been activated
@@ -62,6 +51,7 @@
   BOOL _processingDirectEvent;
   NSMutableArray<REAOnAnimationCallback> *_onAnimationCallbacks;
   NSMutableArray<REANativeAnimationOp> *_operationsInBatch;
+  REAEventHandler _eventHandler;
 }
 
 - (instancetype)initWithModule:(REAModule *)reanimatedModule
@@ -83,6 +73,7 @@
 
 - (void)invalidate
 {
+  _eventHandler = nil;
   [self stopUpdatingOnAnimationFrame];
 }
 
@@ -119,6 +110,11 @@
   }
 }
 
+- (void)registerEventHandler:(REAEventHandler)eventHandler
+{
+  _eventHandler = eventHandler;
+}
+
 - (void)startUpdatingOnAnimationFrame
 {
   if (!_displayLink) {
@@ -144,8 +140,9 @@
 
 - (void)onAnimationFrame:(CADisplayLink *)displayLink
 {
-  // We process all enqueued events first
   _currentAnimationTimestamp = _displayLink.timestamp;
+
+  // We process all enqueued events first
   for (NSUInteger i = 0; i < _eventQueue.count; i++) {
     id<RCTEvent> event = _eventQueue[i];
     [self processEvent:event];
@@ -235,7 +232,7 @@
             @"concat": [REAConcatNode class],
             @"param": [REAParamNode class],
             @"func": [REAFunctionNode class],
-            @"callfunc": [REACallFuncNode class],
+            @"callfunc": [REACallFuncNode class]
 //            @"listener": nil,
             };
   });
@@ -258,6 +255,7 @@
 {
   REANode *node = _nodes[nodeID];
   if (node) {
+    [node onDrop];
     [_nodes removeObjectForKey:nodeID];
   }
 }
@@ -270,7 +268,6 @@
   REANode *parentNode = _nodes[parentID];
   REANode *childNode = _nodes[childID];
 
-  RCTAssertParam(parentNode);
   RCTAssertParam(childNode);
 
   [parentNode addChild:childNode];
@@ -284,7 +281,6 @@
   REANode *parentNode = _nodes[parentID];
   REANode *childNode = _nodes[childID];
 
-  RCTAssertParam(parentNode);
   RCTAssertParam(childNode);
 
   [parentNode removeChild:childNode];
@@ -323,7 +319,9 @@
   REANode *eventNode = _nodes[eventNodeID];
   RCTAssert([eventNode isKindOfClass:[REAEventNode class]], @"Event node is of an invalid type");
 
-  NSString *key = [NSString stringWithFormat:@"%@%@", viewTag, eventName];
+  NSString *key = [NSString stringWithFormat:@"%@%@",
+                   viewTag,
+                   RCTNormalizeInputEventName(eventName)];
   RCTAssert([_eventMapping objectForKey:key] == nil, @"Event handler already set for the given view and event type");
   [_eventMapping setObject:eventNode forKey:key];
 }
@@ -332,13 +330,17 @@
           eventName:(NSString *)eventName
         eventNodeID:(REANodeID)eventNodeID
 {
-  NSString *key = [NSString stringWithFormat:@"%@%@", viewTag, eventName];
+  NSString *key = [NSString stringWithFormat:@"%@%@",
+                   viewTag,
+                   RCTNormalizeInputEventName(eventName)];
   [_eventMapping removeObjectForKey:key];
 }
 
 - (void)processEvent:(id<RCTEvent>)event
 {
-  NSString *key = [NSString stringWithFormat:@"%@%@", event.viewTag, event.eventName];
+  NSString *key = [NSString stringWithFormat:@"%@%@",
+                   event.viewTag,
+                   RCTNormalizeInputEventName(event.eventName)];
   REAEventNode *eventNode = [_eventMapping objectForKey:key];
   [eventNode processEvent:event];
 }
@@ -357,21 +359,32 @@
   static dispatch_once_t directEventNamesToken;
   dispatch_once(&directEventNamesToken, ^{
     directEventNames = @[
-      @"onContentSizeChange",
-      @"onMomentumScrollBegin",
-      @"onMomentumScrollEnd",
-      @"onScroll",
-      @"onScrollBeginDrag",
-      @"onScrollEndDrag"
+      @"topContentSizeChange",
+      @"topMomentumScrollBegin",
+      @"topMomentumScrollEnd",
+      @"topScroll",
+      @"topScrollBeginDrag",
+      @"topScrollEndDrag"
     ];
   });
-  
-  return [directEventNames containsObject:event.eventName];
+
+  return [directEventNames containsObject:RCTNormalizeInputEventName(event.eventName)];
 }
 
 - (void)dispatchEvent:(id<RCTEvent>)event
 {
-  NSString *key = [NSString stringWithFormat:@"%@%@", event.viewTag, event.eventName];
+  NSString *key = [NSString stringWithFormat:@"%@%@",
+                   event.viewTag,
+                   RCTNormalizeInputEventName(event.eventName)];
+
+  NSString *eventHash = [NSString stringWithFormat:@"%@%@",
+  event.viewTag,
+  event.eventName];
+
+  if (_eventHandler != nil) {
+    _eventHandler(eventHash, event);
+  }
+
   REANode *eventNode = [_eventMapping objectForKey:key];
 
   if (eventNode != nil) {
@@ -392,6 +405,52 @@
 {
   _uiProps = uiProps;
   _nativeProps = nativeProps;
+}
+
+- (void)setValueForNodeID:(nonnull NSNumber *)nodeID value:(nonnull NSNumber *)newValue
+{
+  RCTAssertParam(nodeID);
+
+  REANode *node = _nodes[nodeID];
+
+  REAValueNode *valueNode = (REAValueNode *)node;
+  [valueNode setValue:newValue];
+}
+
+- (void)updateProps:(nonnull NSDictionary *)props
+      ofViewWithTag:(nonnull NSNumber *)viewTag
+           viewName:(nonnull NSString *)viewName
+{
+  // TODO: refactor PropsNode to also use this function
+  NSMutableDictionary *uiProps = [NSMutableDictionary new];
+  NSMutableDictionary *nativeProps = [NSMutableDictionary new];
+  NSMutableDictionary *jsProps = [NSMutableDictionary new];
+
+  void (^addBlock)(NSString *key, id obj, BOOL * stop) = ^(NSString *key, id obj, BOOL * stop){
+    if ([self.uiProps containsObject:key]) {
+      uiProps[key] = obj;
+    } else if ([self.nativeProps containsObject:key]) {
+      nativeProps[key] = obj;
+    } else {
+      jsProps[key] = obj;
+    }
+  };
+
+  [props enumerateKeysAndObjectsUsingBlock:addBlock];
+
+  if (uiProps.count > 0) {
+    [self.uiManager
+     synchronouslyUpdateViewOnUIThread:viewTag
+     viewName:viewName
+     props:uiProps];
+    }
+    if (nativeProps.count > 0) {
+      [self enqueueUpdateViewOnNativeThread:viewTag viewName:viewName nativeProps:nativeProps];
+    }
+    if (jsProps.count > 0) {
+      [self.reanimatedModule sendEventWithName:@"onReanimatedPropsChange"
+                                          body:@{@"viewTag": viewTag, @"props": jsProps }];
+    }
 }
 
 @end

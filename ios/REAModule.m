@@ -2,12 +2,12 @@
 
 #import "REANodesManager.h"
 #import "Transitioning/REATransitionManager.h"
+#import "native/NativeProxy.h"
 
 typedef void (^AnimatedOperation)(REANodesManager *nodesManager);
 
 @implementation REAModule
 {
-  REANodesManager *_nodesManager;
   NSMutableArray<AnimatedOperation> *_operations;
   REATransitionManager *_transitionManager;
 }
@@ -134,6 +134,21 @@ RCT_EXPORT_METHOD(configureProps:(nonnull NSArray<NSString *> *)nativeProps
   }];
 }
 
+RCT_EXPORT_METHOD(setValue:(nonnull NSNumber *)nodeID
+                  newValue:(nonnull NSNumber *)newValue
+                  )
+{
+  [self addOperationBlock:^(REANodesManager *nodesManager) {
+    [nodesManager setValueForNodeID:nodeID value:newValue];
+  }];
+}
+
+RCT_EXPORT_METHOD(triggerRender)
+{
+  [self addOperationBlock:^(REANodesManager *nodesManager) {
+    [nodesManager postRunUpdatesAfterAnimation];
+  }];
+}
 
 #pragma mark -- Batch handling
 

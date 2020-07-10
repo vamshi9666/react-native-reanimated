@@ -1,30 +1,39 @@
 {
   "name": "react-native-reanimated",
-  "version": "1.4.0",
+  "version": "2.0.0-alpha.3",
   "description": "More powerful alternative to Animated library for React Native.",
   "scripts": {
     "start": "node node_modules/react-native/local-cli/cli.js start",
     "test": "npm run format && npm run lint && npm run test:unit",
     "test:unit": "jest",
     "format": "prettier --write --list-different './src/**/*.js'",
-    "lint": "eslint './src/**/*.js'"
+    "lint": "eslint './src/**/*.js'",
+    "release": "npm login && release-it"
   },
-  "main": "src/Animated.js",
+  "main": "lib/commonjs/Animated",
+  "module": "lib/module/Animated",
+  "react-native": "src/Animated",
+  "source": "src/Animated",
   "types": "react-native-reanimated.d.ts",
   "files": [
+    "Common/",
     "src/",
+    "lib/",
     "android/src/main/AndroidManifest.xml",
     "android/src/main/java/",
     "android/build.gradle",
+    "android/",
     "ios/",
+    "!ios/build/",
     "RNReanimated.podspec",
     "README.md",
     "react-native-reanimated.d.ts",
-    "mock.js"
+    "mock.js",
+    "plugin.js"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kmagiera/react-native-reanimated.git"
+    "url": "git+https://github.com/software-mansion/react-native-reanimated.git"
   },
   "author": {
     "email": "krzys.magiera@gmail.com",
@@ -33,11 +42,24 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/kmagiera/react-native-reanimated/issues"
+    "url": "https://github.com/software-mansion/react-native-reanimated/issues"
   },
-  "homepage": "https://github.com/kmagiera/react-native-reanimated#readme",
-  "dependencies": {},
+  "homepage": "https://github.com/software-mansion/react-native-reanimated#readme",
+  "dependencies": {
+    "@babel/plugin-transform-object-assign": "^7.10.4",
+    "fbjs": "^1.0.0",
+    "string-hash-64": "^1.0.3"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
   "devDependencies": {
+    "@babel/core": "^7.7.5",
+    "@babel/plugin-proposal-class-properties": "^7.7.4",
+    "@babel/preset-env": "^7.7.6",
+    "@babel/preset-typescript": "^7.7.4",
+    "@react-native-community/bob": "^0.14.3",
     "@react-native-community/eslint-config": "^0.0.5",
     "@types/react": "^16.9.0",
     "@types/react-native": "0.60.19",
@@ -54,9 +76,10 @@
     "jest": "^24.9.0",
     "lint-staged": "^9.4.2",
     "prettier": "^1.13.7",
-    "react": "^16.9.0",
-    "react-native": "^0.61.0",
-    "react-test-renderer": "16.9.0"
+    "react": "^16.11.0",
+    "react-native": "^0.62.2",
+    "react-test-renderer": "16.9.0",
+    "release-it": "^13.1.1"
   },
   "lint-staged": {
     "*.js": [
@@ -64,9 +87,19 @@
       "git add"
     ]
   },
-  "husky": {
+  "release-it": {
     "hooks": {
-      "pre-commit": "lint-staged"
+      "before:git:bump": [
+        "# check if version corresponds to changes in native files  \n git diff --name-only ${latestVersion} HEAD | egrep \"(android/.*)|(ios/.*)\" -q && egrep '\\.0$' -q <<< ${version}"
+      ]
     }
+  },
+  "@react-native-community/bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      "commonjs",
+      "module"
+    ]
   }
 }

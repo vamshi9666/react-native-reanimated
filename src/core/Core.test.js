@@ -5,9 +5,10 @@ import renderer from 'react-test-renderer';
 
 jest.mock('../ReanimatedEventEmitter');
 jest.mock('../ReanimatedModule');
+jest.mock('../reanimated2/NativeReanimated.js');
 
 describe('Core Animated components', () => {
-  it('fails if something other then a node or function that returns a node is passed to Animated.Code exec prop', () => {
+  xit('fails if something other then a node or function that returns a node is passed to Animated.Code exec prop', () => {
     console.error = jest.fn();
 
     expect(() =>
@@ -17,7 +18,7 @@ describe('Core Animated components', () => {
     );
   });
 
-  it('fails if something other then a node or function that returns a node is passed to Animated.Code children', () => {
+  xit('fails if something other then a node or function that returns a node is passed to Animated.Code children', () => {
     console.error = jest.fn();
 
     expect(() =>
